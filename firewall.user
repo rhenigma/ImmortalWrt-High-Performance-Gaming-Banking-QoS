@@ -1,0 +1,2 @@
+ft -f /etc/firewall.user.d/unifi-prio.nft
+nft -f /etc/firewall.user.d/banking-prio.nft
