@@ -1,0 +1,13 @@
+# Define common banking/payment ports
+define banking_ports = { 443, 8443, 8080 }
+define bank_ips = { 1.1.1.1, 8.8.8.8 }
+
+add table inet fw4
+add chain inet fw4 mangle_postrouting { type filter hook postrouting priority mangle; }
+
+# Corrected Rule: Using 'ip length' (Headers + Payload)
+# 128 bytes is enough for a TCP ACK or a small TLS Handshake packet
+add rule inet fw4 mangle_postrouting tcp dport $banking_ports tcp flags ack ip length < 128 counter ip dscp set ef comment "Unifi: Fast-Track Banking ACKs"
+
+# Specific IP Rule
+add rule inet fw4 mangle_postrouting tcp dport $banking_ports ip daddr $bank_ips counter ip dscp set ef comment "Unifi: Specific Bank Priority"
