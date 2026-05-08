@@ -1,0 +1,53 @@
+# --- INITIALIZATION ---
+# Ensures the table and chains exist so the following rules have a home
+add table inet fw4
+add chain inet fw4 postrouting { type filter hook postrouting priority srcnat + 1; }
+add chain inet fw4 forward_wan
+
+# --- POSTROUTING: ISP CLOAKING ---
+add rule inet fw4 postrouting oifname "pppoe-wan" ip ttl set 64 comment "Unifi: Android TTL Stealth"
+add rule inet fw4 postrouting oifname "pppoe-wan" ip6 hoplimit set 64 comment "Unifi: IPv6 Stealth"
+
+# --- FORWARDING: CRITICAL INFRASTRUCTURE ---
+# Using 'insert' to put these at the very top of the forward_wan chain
+insert rule inet fw4 forward_wan tcp flags syn tcp option maxseg size set 1452 comment "Unifi: MSS Clamp"
+insert rule inet fw4 forward_wan ct state established,related flow add @ft comment "Unifi: HW Flow Offload"
+insert rule inet fw4 forward_wan ip6 nexthdr 0 counter drop comment "IPv6: Drop HBH"
+
+# --- FORWARDING: LATENCY & SPEED ---
+insert rule inet fw4 forward_wan udp dport 53 counter accept comment "Unifi: Fast DNS"
+insert rule inet fw4 forward_wan tcp dport 53 counter accept comment "Unifi: Fast DNS TCP"
+insert rule inet fw4 forward_wan tcp flags & (syn|ack) == syn counter accept comment "Unifi: Fast Handshake"
+insert rule inet fw4 forward_wan tcp flags ack counter accept comment "Unifi: Prioritize ACKs"
+insert rule inet fw4 forward_wan meta l4proto ipv6-icmp accept comment "IPv6: Neighbor Discovery"
+
+# --- FORWARDING: GAMING PRIORITY ---
+insert rule inet fw4 forward_wan ip dscp { cs4, ef, af41 } counter accept comment "Unifi: Gaming v4"
+insert rule inet fw4 forward_wan ip6 dscp { cs4, ef, af41 } counter accept comment "Unifi: Gaming v6"
+insert rule inet fw4 forward_wan udp dport 10000-20000 counter accept comment "Unifi: Android UDP Range"
+insert rule inet fw4 forward_wan udp length < 256 counter accept comment "Unifi: Gaming Express"
+insert rule inet fw4 forward_wan udp length 40-512 counter accept comment "Unifi: Mobile Gaming Burst"
+
+# --- FORWARDING: SOCIAL & STREAMING ---
+insert rule inet fw4 forward_wan udp dport 443 counter accept comment "Unifi: YouTube/QUIC Fast-Track"
+insert rule inet fw4 forward_wan ip dscp { af11, af12, af21 } counter accept comment "Unifi: Multimedia Priority"
+insert rule inet fw4 forward_wan tcp dport { 80, 443 } ct state established counter accept comment "Unifi: Web/Social Priority"
+
+# --- FORWARDING: SECURITY ---
+insert rule inet fw4 forward_wan ct state invalid counter drop comment "Security: Drop Invalid"
+insert rule inet fw4 forward_wan meta l4proto icmpv6 counter accept comment "IPv6: Essential ICMPv6"
+insert rule inet fw4 forward_wan ip protocol icmp icmp type echo-request limit rate 5/second counter accept comment "Security: Rate Limit Ping"
+insert rule inet fw4 forward_wan ip protocol icmp icmp type echo-request counter drop comment "Security: ICMP Flood Protect"
+
+# --- FORWARDING: GAMING & REAL-TIME ---
+# Added cs3 and af31 for better TikTok/Handshake handling
+insert rule inet fw4 forward_wan ip dscp { cs4, ef, af41, af31, cs3 } counter accept comment "Unifi: Ultra Gaming & VoIP"
+insert rule inet fw4 forward_wan ip6 dscp { cs4, ef, af41, af31, cs3 } counter accept comment "Unifi: Ultra Gaming v6"
+
+# Specific Mobile Gaming & WeChat Voice call range
+insert rule inet fw4 forward_wan udp dport { 10000-20000, 3478, 8000-8010 } counter accept comment "Unifi: Gaming & WeChat VoIP"
+
+# --- FORWARDING: SOCIAL MEDIA & STREAMING (TikTok/FB/YT) ---
+# YouTube/QUIC is already there, adding specific Multimedia DSCP
+insert rule inet fw4 forward_wan udp dport 443 counter accept comment "Unifi: YouTube/QUIC Fast-Track"
+insert rule inet fw4 forward_wan ip dscp { af11, af12, af21, af22 } counter accept comment "Unifi: TikTok/Social Buffer Priority"
